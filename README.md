@@ -10,14 +10,18 @@ This project is a Python script for updating DNS records on Hover. It supports o
 
 ## Setup Instructions
 
-### 1. Clone the Repository
+### 1. Disable Email 2FA
+
+In your hover.com account settings, disable "two-step sign in" authentication via email. Immediately re-enable it, but choose app authentication instead. Save the hexadecimal code `xxxx xxxx xxxx xxxx xxxx xxxx xx`, as this script requires it.
+
+### 2. Clone the Repository
 
 ```sh
 git clone <repository_url>
 cd <repository_directory>
 ```
 
-### 2. Install Python Dependencies
+### 3. Install Python Dependencies
 
 Install the required Python libraries using `pip`:
 
@@ -25,7 +29,7 @@ Install the required Python libraries using `pip`:
 pip install requests
 ```
 
-### 3. Install `mitmproxy` (Optional)
+### 4. Install `mitmproxy` (Optional)
 
 `mitmproxy` is used for debugging HTTP/HTTPS requests. To install `mitmproxy`, run:
 
@@ -33,7 +37,7 @@ pip install requests
 pip install mitmproxy
 ```
 
-### 4. Create Configuration Files
+### 5. Create Configuration Files
 
 Create the following configuration files:
 
@@ -43,25 +47,15 @@ Create a `config.json` file in the project directory with the following content:
 
 ```json
 {
-    "dnsid": "<your_dns_id>",
     "username": "<your_hover_username>",
-    "password": "<your_hover_password>",
-    "discoverip": "true",
-    "srcdomain": "",
-    "ipaddress": "",
-    "totp_secret": "<your_totp_secret>",
+    "password": "<password>",
+    "domain": "your-domain.net",
+    "subdomain": null,
+    "totp_secret": "xxxx xxxx xxxx xxxx xxxx xxxx xx"
 }
 ```
 
-Replace the placeholders with your actual values.
-
-#### `IP`
-
-Create an empty `IP` file in the project directory:
-
-```sh
-touch IP
-```
+Replace the placeholders with your actual values. the TOTP secret is the authenticator app code from earlier.
 
 ## Usage Instructions
 
@@ -70,7 +64,7 @@ touch IP
 To run the script, use the following command:
 
 ```sh
-python hover-update.py [--logging] [--mitm]
+python3 . [--logging] [--mitm]
 ```
 
 #### Command Line Arguments
@@ -83,19 +77,19 @@ python hover-update.py [--logging] [--mitm]
 To run the script with logging enabled:
 
 ```sh
-python hover-update.py --logging
+python . --logging
 ```
 
 To run the script with `mitmproxy` enabled:
 
 ```sh
-python hover-update.py --mitm
+python . --mitm
 ```
 
 To run the script with both logging and `mitmproxy` enabled:
 
 ```sh
-python hover-update.py --logging --mitm
+python . --logging --mitm
 ```
 
 ## Using `mitmproxy` for Debugging
@@ -117,7 +111,7 @@ This will start `mitmproxy` and listen on port 8080 by default.
 Run the script with the `--mitm` flag to route HTTP/HTTPS requests through `mitmproxy`:
 
 ```sh
-python hover-update.py --mitm
+python . --mitm
 ```
 
 ### 3. Inspect Requests and Responses

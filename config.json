@@ -1,9 +1,7 @@
 {
-    "dnsid": "",
-    "username": "",
-    "password": "",
-    "discoverip": "true",
-    "srcdomain": "",
-    "ipaddress": "192.168.1.1",
+    "username": "<hover-username>",
+    "password": "<hover-password>",
+    "domain": "your-domain.com",
+    "subdomain": null,
     "totp_secret": "xxxx xxxx xxxx xxxx xxxx xxxx xx"
 }
