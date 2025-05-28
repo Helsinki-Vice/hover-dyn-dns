@@ -3,7 +3,7 @@ import json
 import requests
 import requests.cookies
 
-from logging_out import log_output, LOG_FILE
+from logging_out import log_output
 
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
@@ -22,7 +22,7 @@ DEFAULT_PROXIES = {
     "https": "http://127.0.0.1:8080"
 }
 
-def load_config(config_file: str, logging) -> dict:
+def load_config_file(config_file: str, log_file: str, logging: bool) -> dict:
     """
     Loads the configuration from a JSON file.
     """
@@ -30,24 +30,26 @@ def load_config(config_file: str, logging) -> dict:
         with open(config_file, 'r') as file:
             return json.load(file)
     except json.JSONDecodeError as e:
-        log_output(f"Error loading config file: {e}", logging)
+        log_output(f"Error loading config file: {e}", log_file, logging)
         exit(1)
 
-def get_external_ip(proxies) -> str:
+def get_external_ip(proxies, use_ipv6: bool) -> str:
     """
     Retrieves the external IP address using the ipify API.
     """
-    response = requests.get("https://api.ipify.org", proxies=proxies, verify=True)
+    api = "https://api6.ipify.org" if use_ipv6 else "https://api.ipify.org"
+    response = requests.get(api, proxies=proxies, verify=True)
     return response.text
 
-def get_dns_ip(domain: str) -> str | None:
+def get_dns_ip(domain: str, use_ipv6: bool) -> str | None:
     """
     Retrieves the IP address for a given domain using the getent hosts command.
     """
-    response = os.popen(f"getent hosts {domain}").read().strip()
+    command = f"getent ahostsv6 {domain}" if use_ipv6 else f"getent ahostsv4 {domain}"
+    response = os.popen(command).read().splitlines()[0].split()[0]
     return response.split()[0] if response else None
 
-def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logging: bool):
+def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logfile: str, logging: bool):
     """
     Updates an existing DNS record with a known ID.
     """
@@ -73,13 +75,13 @@ def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: 
     }
     
     response = requests.put(url=DNS_SUBENTRIES_URL, json=put_data, cookies=cookies, proxies=proxies, verify=True)
-    log_output(DNS_UPDATE_URL.format(dns_entry_id), logging)
+    log_output(DNS_UPDATE_URL.format(dns_entry_id), logfile, logging)
 
-    log_output(f"DNS update response status code: {response.status_code}", logging)
-    log_output(f"DNS update response content: {response.content}", logging)
+    log_output(f"DNS update response status code: {response.status_code}", logfile, logging)
+    log_output(f"DNS update response content: {response.content}", logfile, logging)
     return response
 
-def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logging: bool):
+def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logfile: str, logging: bool):
     """
     Adds a new DNS record.
     """
@@ -92,11 +94,11 @@ def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: s
         },
         "id": f"domain-{domain}"
     }
-    
+    log_output(str(post_data), logfile, logging)
     response = requests.post(url=DNS_SUBENTRIES_URL, json=post_data, cookies=cookies, proxies=proxies, verify=True)
     
-    log_output(f"DNS update response status code: {response.status_code}", logging)
-    log_output(f"DNS update response content: {response.content}", logging)
+    log_output(f"DNS update response status code: {response.status_code}", logfile, logging)
+    log_output(f"DNS update response content: {response.content}", logfile, logging)
     return response
 
 def get_dns_entries(cookies, proxies, logging):
