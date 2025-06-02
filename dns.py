@@ -1,5 +1,5 @@
 import os
-import json
+import socket
 import requests
 import requests.cookies
 
@@ -22,17 +22,6 @@ DEFAULT_PROXIES = {
     "https": "http://127.0.0.1:8080"
 }
 
-def load_config_file(config_file: str, log_file: str, logging: bool) -> dict:
-    """
-    Loads the configuration from a JSON file.
-    """
-    try:
-        with open(config_file, 'r') as file:
-            return json.load(file)
-    except json.JSONDecodeError as e:
-        log_output(f"Error loading config file: {e}", log_file, logging)
-        exit(1)
-
 def get_external_ip(proxies, use_ipv6: bool) -> str:
     """
     Retrieves the external IP address using the ipify API.
@@ -42,14 +31,12 @@ def get_external_ip(proxies, use_ipv6: bool) -> str:
     return response.text
 
 def get_dns_ip(domain: str, use_ipv6: bool) -> str | None:
-    """
-    Retrieves the IP address for a given domain using the getent hosts command.
-    """
-    command = f"getent ahostsv6 {domain}" if use_ipv6 else f"getent ahostsv4 {domain}"
-    response = os.popen(command).read().splitlines()[0].split()[0]
-    return response.split()[0] if response else None
+    "Retrieves the IP address for a given domain."
+    for addrinfo in socket.getaddrinfo(domain, 80, socket.AddressFamily.AF_INET6 if use_ipv6 else socket.AddressFamily.AF_INET):
+        if isinstance(addrinfo[4][0], str):
+            return addrinfo[4][0]
 
-def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logfile: str, logging: bool):
+def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies):
     """
     Updates an existing DNS record with a known ID.
     """
@@ -75,13 +62,13 @@ def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: 
     }
     
     response = requests.put(url=DNS_SUBENTRIES_URL, json=put_data, cookies=cookies, proxies=proxies, verify=True)
-    log_output(DNS_UPDATE_URL.format(dns_entry_id), logfile, logging)
+    log_output(DNS_UPDATE_URL.format(dns_entry_id))
 
-    log_output(f"DNS update response status code: {response.status_code}", logfile, logging)
-    log_output(f"DNS update response content: {response.content}", logfile, logging)
+    log_output(f"DNS update response status code: {response.status_code}")
+    log_output(f"DNS update response content: {response.content}")
     return response
 
-def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies, logfile: str, logging: bool):
+def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies):
     """
     Adds a new DNS record.
     """
@@ -94,11 +81,11 @@ def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: s
         },
         "id": f"domain-{domain}"
     }
-    log_output(str(post_data), logfile, logging)
+    log_output(str(post_data))
     response = requests.post(url=DNS_SUBENTRIES_URL, json=post_data, cookies=cookies, proxies=proxies, verify=True)
     
-    log_output(f"DNS update response status code: {response.status_code}", logfile, logging)
-    log_output(f"DNS update response content: {response.content}", logfile, logging)
+    log_output(f"DNS update response status code: {response.status_code}")
+    log_output(f"DNS update response content: {response.content}")
     return response
 
 def get_dns_entries(cookies, proxies, logging):

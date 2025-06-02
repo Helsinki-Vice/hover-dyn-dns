@@ -40,16 +40,16 @@ def generate_totp(secret: str, time_step:int=30, digits:int=6) -> str:
     otp = binary % (10 ** digits)
     return f"{otp:0{digits}d}"
 
-def init_session(proxies, logfile: str, logging: bool) -> requests.cookies.RequestsCookieJar:
+def init_session(proxies) -> requests.cookies.RequestsCookieJar:
     """
     Initializes a session with Hover to retrieve cookies.
     """
     response = requests.get("https://www.hover.com/signin", proxies=proxies, verify=True)
-    log_output(f"Init session response status code: {response.status_code}", logfile, logging)
+    log_output(f"Init session response status code: {response.status_code}")
     return response.cookies
 
 
-def submit_username_password(username: str, password: str, cookies: requests.cookies.RequestsCookieJar, proxies, logfile: str, logging: bool) -> requests.Response:
+def submit_username_password(username: str, password: str, cookies: requests.cookies.RequestsCookieJar, proxies) -> requests.Response:
     """
     Logs in to Hover with the provided username and password.
     """
@@ -59,14 +59,14 @@ def submit_username_password(username: str, password: str, cookies: requests.coo
         "token": None
     }
     response = requests.post(AUTH_ENDPOINT, json=login_payload, proxies=proxies, verify=True, cookies=cookies)
-    log_output(f"Payload: {login_payload}", logfile, logging)
-    log_output(f"Login response status code: {response.status_code}", logfile, logging)
-    log_output(f"Login response content: {response.content}", logfile, logging)
-    log_output(f"Cookies: {cookies}", logfile, logging)
+    log_output(f"Payload: {login_payload}")
+    log_output(f"Login response status code: {response.status_code}")
+    log_output(f"Login response content: {response.content}")
+    log_output(f"Cookies: {cookies}")
     return response
 
 
-def submit_2fa_code(totp_code, cookies, proxies, logfile: str, logging: bool):
+def submit_2fa_code(totp_code, cookies, proxies):
     """
     Performs 2FA login with the provided TOTP code.
     """
@@ -74,10 +74,10 @@ def submit_2fa_code(totp_code, cookies, proxies, logfile: str, logging: bool):
         "code": totp_code
     }
     response = requests.post(AUTH_2FA_ENDPOINT, json=login_payload, proxies=proxies, cookies=cookies, verify=True)
-    log_output(f"Payload: {login_payload}", logfile, logging)
-    log_output(f"Login 2FA response status code: {response.status_code}", logfile, logging)
-    log_output(f"Login 2FA response content: {response.content}", logfile, logging)
-    log_output(f"Cookies: {cookies}", logfile, logging)
+    log_output(f"Payload: {login_payload}")
+    log_output(f"Login 2FA response status code: {response.status_code}")
+    log_output(f"Login 2FA response content: {response.content}")
+    log_output(f"Cookies: {cookies}")
     return response
 
 
@@ -110,32 +110,32 @@ def check_cookies_validity(cookies: requests.cookies.RequestsCookieJar | None, p
     return response.status_code == 200
 
 
-def login(username: str, password: str, totp_secret: str, proxies, logfile: str, logging: bool) -> requests.cookies.RequestsCookieJar | None:
+def login(username: str, password: str, totp_secret: str, proxies) -> requests.cookies.RequestsCookieJar | None:
 
-    log_output("Logging in to hover...", logfile, logging)
+    log_output("Logging in to hover...")
     # Check if we are logged in already, reuse session if so
     cookies = load_cookies(COOKIES_FILE)
     if check_cookies_validity(cookies, proxies):
-        log_output("Skipping login process because we are already logged in.", logfile, logging)
+        log_output("Skipping login process because we are already logged in.")
         return cookies
     
     # Otherwise, log in from scratch
-    cookies = init_session(proxies, logfile, logging)
+    cookies = init_session(proxies)
     try:
-        login_response = submit_username_password(username, password, cookies, proxies, logfile, logging)
+        login_response = submit_username_password(username, password, cookies, proxies)
         login_response_cookies = login_response.cookies
         login_response = login_response.json()
     except json.JSONDecodeError:
-        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} did not return JSON data as expected.", logfile, logging)
+        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} did not return JSON data as expected.")
         exit()
     
     if not isinstance(login_response, dict):
-        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} returned {login_response} instead of valid JSON.", logfile, logging)
+        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} returned {login_response} instead of valid JSON.")
         exit()
     
     login_error = login_response.get("error")
     if login_error:
-        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} returned the following error: {login_response}", logfile, logging)
+        log_output(f"Could not login: the endpoint {AUTH_ENDPOINT} returned the following error: {login_response}")
         exit()
     
     if login_response.get("status") == "completed":
@@ -146,30 +146,30 @@ def login(username: str, password: str, totp_secret: str, proxies, logfile: str,
             # We have submitted our username and password, time for the 2FA code
             totp = generate_totp(totp_secret)
             try:
-                totp_response = submit_2fa_code(totp, cookies, proxies, logfile, logging)
+                totp_response = submit_2fa_code(totp, cookies, proxies)
                 cookies = totp_response.cookies
                 totp_response = totp_response.json()
             except json.JSONDecodeError:
-                log_output(f"Could not submit 2fa login code: the endpoint {AUTH_2FA_ENDPOINT} did not return JSON data as expected.", logfile, logging)
+                log_output(f"Could not submit 2fa login code: the endpoint {AUTH_2FA_ENDPOINT} did not return JSON data as expected.")
                 exit()
 
             if not isinstance(totp_response, dict):
-                log_output(f"Could not login: the endpoint {AUTH_2FA_ENDPOINT} returned {totp_response} instead of valid JSON.", logfile, logging)
+                log_output(f"Could not login: the endpoint {AUTH_2FA_ENDPOINT} returned {totp_response} instead of valid JSON.")
                 exit()
             if totp_response.get("succeeded") != True:
-                log_output(f"Could not login: totp code {totp} was not accepted. The server's response was was: {totp_response}", logfile, logging)
+                log_output(f"Could not login: totp code {totp} was not accepted. The server's response was was: {totp_response}")
                 exit()
         elif auth_type == None:
             pass
         else:
-            log_output(f"Hover is asking for a 2FA type of '{auth_type}', which we cannot handle. In your account settings, disable 2FA and re-enable as app authentication. See the readme for more details.", logfile, logging)
+            log_output(f"Hover is asking for a 2FA type of '{auth_type}', which we cannot handle. In your account settings, disable 2FA and re-enable as app authentication. See the readme for more details.")
             exit()
 
     # Logged in... in theory. Let's double check.
     if check_cookies_validity(cookies, proxies):
-        log_output("Login success.", logfile, logging)
+        log_output("Login success.")
         save_cookies(cookies)
         return cookies
     else:
-        log_output(f"The login process seemed to go well, but the server is not accepting our auth cookie of {cookies.get('hoverauth')}.", logfile, logging)
+        log_output(f"The login process seemed to go well, but the server is not accepting our auth cookie of {cookies.get('hoverauth')}.")
         exit()

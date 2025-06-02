@@ -1,7 +1,0 @@
-{
-    "username": "<hover-username>",
-    "password": "<hover-password>",
-    "domain": "your-domain.com",
-    "subdomain": null,
-    "totp_secret": "xxxx xxxx xxxx xxxx xxxx xxxx xx"
-}
