@@ -2,6 +2,8 @@ import os
 import socket
 import requests
 import requests.cookies
+from typing import Literal
+from dataclasses import dataclass
 
 from logging_out import log_output
 
@@ -16,83 +18,100 @@ DOMAIN_CHECK_URL = "https://www.hover.com/api/domains"
 DNS_ENTRIES_URL = "https://www.hover.com/api/dns"
 DNS_SUBENTRIES_URL = "https://www.hover.com/api/control_panel/dns/"
 
-# Proxy settings for mitmproxy
-DEFAULT_PROXIES = {
-    "http": "http://127.0.0.1:8080",
-    "https": "http://127.0.0.1:8080"
-}
+@dataclass
+class DnsRecord:
+    domain: str
+    host: str
+    value: str
+    record_type: Literal["A", "AAAA", "CNAME", "MX", "SRV"]
 
-def get_external_ip(proxies, use_ipv6: bool) -> str:
+    def is_ip4(self):
+        return self.record_type == "A"
+    
+    def is_ip6(self):
+        return self.record_type == "AAAA"
+    
+    def get_fqdn(self) -> str:
+        if self.get_host() == "@":
+            return self.domain
+        
+        return f"{self.host}.{self.domain}"
+    
+    def get_host(self) -> str:
+
+        if self.host is None:
+            return "@"
+        
+        return self.host
+
+def get_external_ip(use_ipv6: bool) -> str:
     """
     Retrieves the external IP address using the ipify API.
     """
     api = "https://api6.ipify.org" if use_ipv6 else "https://api.ipify.org"
-    response = requests.get(api, proxies=proxies, verify=True)
+    response = requests.get(api, verify=True)
     return response.text
 
 def get_dns_ip(domain: str, use_ipv6: bool) -> str | None:
     "Retrieves the IP address for a given domain."
-    for addrinfo in socket.getaddrinfo(domain, 80, socket.AddressFamily.AF_INET6 if use_ipv6 else socket.AddressFamily.AF_INET):
-        if isinstance(addrinfo[4][0], str):
-            return addrinfo[4][0]
+    try:
+        for addrinfo in socket.getaddrinfo(domain, 80, socket.AddressFamily.AF_INET6 if use_ipv6 else socket.AddressFamily.AF_INET):
+            if isinstance(addrinfo[4][0], str):
+                return addrinfo[4][0]
+    except socket.gaierror:
+        return None
 
-def submit_put_on_existing_dns_entry(dns_entry_id: str, domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies):
+
+def submit_dns_entry_update(record: DnsRecord, cookies: requests.cookies.RequestsCookieJar, dns_entry_id: str | None):
     """
-    Updates an existing DNS record with a known ID.
+    Updates a new or existing DNS record.
     """
-    put_data = {
-        "domain": {
-            "id": f"domain-{domain}",
-            "dns_records": [
-                {
-                    "id": dns_entry_id,
-                    "name": subdomain,
-                    "type": record_type,
-                    "content": new_ip_address,
-                    "ttl": "900",
-                    "is_default": False,
-                    "can_revert": True
-                }
-            ]
-        },
-        "fields": {
-            "content": new_ip_address,
-            "ttl": "900"
+    if dns_entry_id:
+        http_method = requests.put
+        json_data = {
+            "domain": {
+                "id": f"domain-{record.domain}",
+                "dns_records": [
+                    {
+                        "id": dns_entry_id,
+                        "name": record.host,
+                        "type": record.record_type,
+                        "content": record.value,
+                        "ttl": "900",
+                        "is_default": False,
+                        "can_revert": True
+                    }
+                ]
+            },
+            "fields": {
+                "content": record.value,
+                "ttl": "900"
+            }
         }
-    }
-    
-    response = requests.put(url=DNS_SUBENTRIES_URL, json=put_data, cookies=cookies, proxies=proxies, verify=True)
+    else:
+        http_method = requests.post
+        json_data = {
+            "dns_record": {
+                "name": record.host,
+                "content": record.value,
+                "type": record.record_type,
+                "ttl": "900"
+            },
+            "id": f"domain-{record.domain}"
+        }
+
+    response = http_method(url=DNS_SUBENTRIES_URL, json=json_data, cookies=cookies, verify=True)
     log_output(DNS_UPDATE_URL.format(dns_entry_id))
-
     log_output(f"DNS update response status code: {response.status_code}")
     log_output(f"DNS update response content: {response.content}")
+
     return response
 
-def submit_post_for_new_dns_entry(domain: str, subdomain: str, new_ip_address: str, record_type: str, cookies: requests.cookies.RequestsCookieJar, proxies):
-    """
-    Adds a new DNS record.
-    """
-    post_data = {
-        "dns_record": {
-            "name": subdomain,
-            "content": new_ip_address,
-            "type": record_type,
-            "ttl": "900"
-        },
-        "id": f"domain-{domain}"
-    }
-    log_output(str(post_data))
-    response = requests.post(url=DNS_SUBENTRIES_URL, json=post_data, cookies=cookies, proxies=proxies, verify=True)
-    
-    log_output(f"DNS update response status code: {response.status_code}")
-    log_output(f"DNS update response content: {response.content}")
-    return response
-
-def get_dns_entries(cookies, proxies, logging):
+def get_dns_entries(cookies, logging):
     """
     Retrieves the DNS entries for the account.
     """
-    response = requests.get(DNS_ENTRIES_URL, cookies=cookies, proxies=proxies, verify=True)
+    response = requests.get(DNS_ENTRIES_URL, cookies=cookies, verify=True)
     if response.status_code == 200:
         return response.json()        
     else:

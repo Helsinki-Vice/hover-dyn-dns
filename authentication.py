@@ -40,16 +40,16 @@ def generate_totp(secret: str, time_step:int=30, digits:int=6) -> str:
     otp = binary % (10 ** digits)
     return f"{otp:0{digits}d}"
 
-def init_session(proxies) -> requests.cookies.RequestsCookieJar:
+def init_session() -> requests.cookies.RequestsCookieJar:
     """
     Initializes a session with Hover to retrieve cookies.
     """
-    response = requests.get("https://www.hover.com/signin", proxies=proxies, verify=True)
+    response = requests.get("https://www.hover.com/signin", verify=True)
     log_output(f"Init session response status code: {response.status_code}")
     return response.cookies
 
 
-def submit_username_password(username: str, password: str, cookies: requests.cookies.RequestsCookieJar, proxies) -> requests.Response:
+def submit_username_password(username: str, password: str, cookies: requests.cookies.RequestsCookieJar) -> requests.Response:
     """
     Logs in to Hover with the provided username and password.
     """
@@ -58,7 +58,7 @@ def submit_username_password(username: str, password: str, cookies: requests.coo
         "password": password,
         "token": None
     }
-    response = requests.post(AUTH_ENDPOINT, json=login_payload, proxies=proxies, verify=True, cookies=cookies)
+    response = requests.post(AUTH_ENDPOINT, json=login_payload, verify=True, cookies=cookies)
     log_output(f"Payload: {login_payload}")
     log_output(f"Login response status code: {response.status_code}")
     log_output(f"Login response content: {response.content}")
@@ -66,14 +66,14 @@ def submit_username_password(username: str, password: str, cookies: requests.coo
     return response
 
 
-def submit_2fa_code(totp_code, cookies, proxies):
+def submit_2fa_code(totp_code, cookies):
     """
     Performs 2FA login with the provided TOTP code.
     """
     login_payload = {
         "code": totp_code
     }
-    response = requests.post(AUTH_2FA_ENDPOINT, json=login_payload, proxies=proxies, cookies=cookies, verify=True)
+    response = requests.post(AUTH_2FA_ENDPOINT, json=login_payload, cookies=cookies, verify=True)
     log_output(f"Payload: {login_payload}")
     log_output(f"Login 2FA response status code: {response.status_code}")
     log_output(f"Login 2FA response content: {response.content}")
@@ -100,29 +100,29 @@ def load_cookies(cookies_filename: str) -> requests.cookies.RequestsCookieJar | 
     return None
 
 
-def check_cookies_validity(cookies: requests.cookies.RequestsCookieJar | None, proxies):
+def check_cookies_validity(cookies: requests.cookies.RequestsCookieJar | None):
     """
     Checks if the cookies are still valid by making a request to an authenticated endpoint.
     """
     if cookies is None:
         return False
-    response = requests.get(DOMAIN_CHECK_URL, cookies=cookies, proxies=proxies, verify=True)
+    response = requests.get(DOMAIN_CHECK_URL, cookies=cookies, verify=True)
     return response.status_code == 200
 
 
-def login(username: str, password: str, totp_secret: str, proxies) -> requests.cookies.RequestsCookieJar | None:
+def login(username: str, password: str, totp_secret: str) -> requests.cookies.RequestsCookieJar | None:
 
     log_output("Logging in to hover...")
     # Check if we are logged in already, reuse session if so
     cookies = load_cookies(COOKIES_FILE)
-    if check_cookies_validity(cookies, proxies):
+    if check_cookies_validity(cookies):
         log_output("Skipping login process because we are already logged in.")
         return cookies
     
     # Otherwise, log in from scratch
-    cookies = init_session(proxies)
+    cookies = init_session()
     try:
-        login_response = submit_username_password(username, password, cookies, proxies)
+        login_response = submit_username_password(username, password, cookies)
         login_response_cookies = login_response.cookies
         login_response = login_response.json()
     except json.JSONDecodeError:
@@ -146,7 +146,7 @@ def login(username: str, password: str, totp_secret: str, proxies) -> requests.c
             # We have submitted our username and password, time for the 2FA code
             totp = generate_totp(totp_secret)
             try:
-                totp_response = submit_2fa_code(totp, cookies, proxies)
+                totp_response = submit_2fa_code(totp, cookies)
                 cookies = totp_response.cookies
                 totp_response = totp_response.json()
             except json.JSONDecodeError:
@@ -166,7 +166,7 @@ def login(username: str, password: str, totp_secret: str, proxies) -> requests.c
             exit()
 
     # Logged in... in theory. Let's double check.
-    if check_cookies_validity(cookies, proxies):
+    if check_cookies_validity(cookies):
         log_output("Login success.")
         save_cookies(cookies)
         return cookies
